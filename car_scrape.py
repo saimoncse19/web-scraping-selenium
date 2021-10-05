@@ -16,6 +16,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
 import time
+import pandas as pd
 
 
 # driver setup
@@ -55,7 +56,6 @@ if __name__ == '__main__':
 
     # pages to navigate...
     paginate_url = driver.find_element_by_xpath("//*[contains(@class, 'pagination-btn srp-text')]").get_attribute('href')[:-1]
-    print(paginate_url)
 
     # selecting cars
     cars = driver.find_elements_by_class_name("usurp-inventory-card-vdp-link")
@@ -67,15 +67,72 @@ if __name__ == '__main__':
 
     # getting all the required URLs
     all_required_car_urls = []
-    all_cars = [cars]
 
+    # 1st page
     for car in cars:
-        print(car.get_attribute('href'))
+        all_required_car_urls.append(car.get_attribute('href'))
 
-    for link in pages_links[:3]:
+    for link in pages_links[:1]:
         driver.get(link)
         _cars = driver.find_elements_by_class_name("usurp-inventory-card-vdp-link")
-        all_cars.append(_cars)
+        for car in _cars:
+            all_required_car_urls.append(car.get_attribute('href'))
+
+    # fields to scrape
+    names = []
+    prices = []
+    vin_numbers = []
+    vehicle_summaries = []
+    top_specs = []
+
+    # Only scrapping first 200 cars' details
+    for link in all_required_car_urls[:20]:
+        driver.get(link)
+
+        # getting car name and saving it
+        car_name = driver.find_element_by_xpath('//*[@class="not-opaque text-black d-inline-block mb-0 size-24"]')
+        names.append(car_name.text) if car_name.text else names.append(None)
+
+        # getting car price and saving it
+        car_price = driver.find_element_by_xpath('//*[@data-test="vdp-price-row"]')
+        prices.append(car_price.text) if car_price.text else None
+
+        # getting vin number
+        req_url = str(driver.current_url)
+        car_vin = req_url.split('vin/')[1].split('/')[0] if req_url and 'vin/' in req_url else None
+        vin_numbers.append(car_vin)
+
+        # summary
+        car_summary = driver.find_elements_by_xpath("""//*[contains(text(),'Vehicle Summary')]/following-sibling::div/div/div/div[2]""")
+        final_summary = ''
+        for summary in car_summary:
+            final_summary += f" {summary.text}"
+        vehicle_summaries.append(final_summary)
+
+        # top features
+        final_top_feature = ''
+        top_features = driver.find_elements_by_xpath("//*[contains(text(),'Comfort & Convenience')]/following-sibling::div//ul")
+
+        if top_features:
+            for feature in top_features:
+                final_top_feature += f' {feature.text}'
+        else:
+            final_top_feature = ''
+        top_specs.append(final_top_feature)
+
+    # export to csv/xlsx
+    df = pd.DataFrame({
+        'Name': names,
+        'Price': prices,
+        'VIN number': vin_numbers,
+        'Vehicle Summary': vehicle_summaries,
+        'Top Specs': top_specs
+    })
+
+    file = "output/car_data.xlsx"
+    df.to_excel(file)
+
+    driver.quit()
 
 
 
